@@ -1,0 +1,18 @@
+<lui title="Plugins" width=360 height=160 theme="dark">
+let count = 3
+
+let card = <panel gap=12>
+    <row gap=8>
+        <badge bg="#22c55e" color="#0b1020">"New"</badge>
+        <badge>"Beta"</badge>
+    </row>
+    <label>"Badges come from plugins/badge.lua"</label>
+    <button>
+        "Clicks"
+        <on click>
+            count = count + 1
+        </on>
+    </button>
+</panel>
+
+</lui>

@@ -1,0 +1,91 @@
+<lui title="Weather" width=460 height=500 theme="dark" accent="#38bdf8">
+let city = "Berlin"
+let place = ""
+let now = "Loading…"
+let status = ""
+let series = {}
+
+local codes = {
+    [0] = "Clear sky", [1] = "Mostly clear", [2] = "Partly cloudy", [3] = "Overcast",
+    [45] = "Fog", [48] = "Fog", [51] = "Drizzle", [53] = "Drizzle", [55] = "Drizzle",
+    [61] = "Rain", [63] = "Rain", [65] = "Heavy rain", [71] = "Snow", [73] = "Snow",
+    [75] = "Heavy snow", [80] = "Rain showers", [81] = "Rain showers", [82] = "Violent showers",
+    [95] = "Thunderstorm", [96] = "Thunderstorm", [99] = "Thunderstorm",
+}
+
+function lookup(name)
+    status = "Looking up " .. name .. "…"
+    local body, err = L.fetch("https://geocoding-api.open-meteo.com/v1/search?count=1&name=" .. L.urlencode(name))
+    local geo = body and L.json(body)
+    if not geo or not geo.results then
+        status = "No city called '" .. name .. "'"
+        return
+    end
+    local c = geo.results[1]
+    place = c.name .. ", " .. (c.country or "")
+    body, err = L.fetch(string.format(
+        "https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&timezone=auto" ..
+        "&current=temperature_2m,wind_speed_10m,weather_code&hourly=temperature_2m&forecast_days=1",
+        c.latitude, c.longitude))
+    local f = body and L.json(body)
+    if not f or not f.current then
+        status = "Weather unavailable: " .. (err or "bad response")
+        return
+    end
+    local cur = f.current
+    now = string.format("%.0f°C  ·  %s", cur.temperature_2m, codes[cur.weather_code] or "Unknown")
+    status = string.format("Wind %.0f km/h", cur.wind_speed_10m)
+    series = f.hourly.temperature_2m
+end
+
+lookup(city)
+
+let search = <row gap=8>
+    <input placeholder="City" width=280 text="Berlin">
+        <on change>
+            city = self.text
+        </on>
+        <on submit>
+            lookup(self.text)
+        </on>
+    </input>
+    <button>
+        "Search"
+        <on click>
+            lookup(city)
+        </on>
+    </button>
+</row>
+
+let header = <panel gap=6>
+    <label size=26 weight=1>
+        "{place}"
+    </label>
+    <label size=40 weight=1>
+        "{now}"
+    </label>
+    <label size=16>
+        "{status}"
+    </label>
+</panel>
+
+let chart = <canvas width=400 height=200 bg="#1c1f26">
+    <on draw>
+        if #series < 2 then return end
+        local lo, hi = math.huge, -math.huge
+        for _, v in ipairs(series) do
+            if v < lo then lo = v end
+            if v > hi then hi = v end
+        end
+        local span = math.max(hi - lo, 1)
+        local function px(i) return 20 + (i - 1) * (g.width - 40) / (#series - 1) end
+        local function py(v) return g.height - 30 - (v - lo) / span * (g.height - 60) end
+        for i = 2, #series do
+            g.line(px(i - 1), py(series[i - 1]), px(i), py(series[i]), 3, "#38bdf8")
+        end
+        g.text(string.format("%.0f°", hi), 8, 8, 14, "#9ca3af")
+        g.text(string.format("%.0f°", lo), 8, g.height - 24, 14, "#9ca3af")
+    </on>
+</canvas>
+
+</lui>

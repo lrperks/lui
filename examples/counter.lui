@@ -1,0 +1,12 @@
+<lui title="Counter" width=480 height=200>
+let clicks = 0
+
+let button = <button>
+    "Click me"
+    <on click>
+        clicks = clicks + 1
+        button.text = "Clicks: " .. clicks
+    </on>
+</button>
+
+</lui>

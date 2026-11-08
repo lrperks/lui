@@ -1,0 +1,39 @@
+<lui title="Canvas and scroll" width=520 height=420 theme="dark">
+let t = 0
+
+let view = <canvas width=480 height=200>
+    <on frame>
+        t = t + dt
+    </on>
+    <on draw>
+        for i = 0, 9 do
+            g.circle(40 + i * 45, 100 + math.sin(t * 2 + i) * 40, 14, "#22c55e")
+        end
+        g.text("Canvas time: " .. string.format("%.1f", t), 12, 12, 16, "#e5e7eb")
+    </on>
+</canvas>
+
+let list = <scroll width=480 height=180 bg="#1c1f26">
+    <label>"Row 1"</label>
+    <label>"Row 2"</label>
+    <label>"Row 3"</label>
+    <label>"Row 4"</label>
+    <label>"Row 5"</label>
+    <label>"Row 6"</label>
+    <label>"Row 7"</label>
+    <label>"Row 8"</label>
+    <label>"Row 9"</label>
+    <label>"Row 10"</label>
+    <label>"Row 11"</label>
+    <label>"Row 12"</label>
+    <label>"Row 13"</label>
+    <label>"Row 14"</label>
+    <label>"Row 15"</label>
+    <label>"Row 16"</label>
+    <label>"Row 17"</label>
+    <label>"Row 18"</label>
+    <label>"Row 19"</label>
+    <label>"Row 20"</label>
+</scroll>
+
+</lui>

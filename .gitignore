@@ -1,0 +1,17 @@
+# Build output
+bin/
+third_party/build/
+src/*.asm
+src/*.o
+src/*.deps
+src/*.links
+
+# Generated Lua from .lui files
+*.lui.lua
+
+# graphify knowledge graph
+graphify-out/
+
+# Editor / OS
+.DS_Store
+*.swp

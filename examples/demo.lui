@@ -1,0 +1,31 @@
+<lui title="Lui demo" width=420 height=420 theme="dark" accent="#22c55e">
+let clicks = 0
+let name = ""
+
+let card = <panel gap=14>
+    let heading = <label size=24 weight=1>
+        "Hello, {name}!"
+    </label>
+
+    <input placeholder="Your name" width=300>
+        <on change>
+            name = self.text
+        </on>
+    </input>
+
+    <checkbox>
+        "Send me updates"
+        <on change>
+            clicks = clicks + 0
+        </on>
+    </checkbox>
+
+    <button>
+        "Clicked {clicks} times"
+        <on click>
+            clicks = clicks + 1
+        </on>
+    </button>
+</panel>
+
+</lui>
