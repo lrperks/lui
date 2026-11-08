@@ -207,7 +207,6 @@ local custom = {}
 function L.define(tag, spec) custom[tag] = spec end
 function L.measure(s, size, weight) return host.measure(s, size or 18, weight or 0) end
 function L.color(c, dflt) return color(c, dflt) end
-function L.theme() return theme end
 
 -- ── layout ──────────────────────────────────────────────────────────
 

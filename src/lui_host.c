@@ -157,44 +157,6 @@ static int h_outline(lua_State *L) {
     return 0;
 }
 
-/* Appends codepoint cp to buf as UTF-8; returns the new length. */
-static int put_utf8(char *buf, int n, int cp) {
-    if (cp < 0x80) {
-        buf[n++] = (char)cp;
-    } else if (cp < 0x800) {
-        buf[n++] = (char)(0xC0 | (cp >> 6));
-        buf[n++] = (char)(0x80 | (cp & 0x3F));
-    } else if (cp < 0x10000) {
-        buf[n++] = (char)(0xE0 | (cp >> 12));
-        buf[n++] = (char)(0x80 | ((cp >> 6) & 0x3F));
-        buf[n++] = (char)(0x80 | (cp & 0x3F));
-    } else {
-        buf[n++] = (char)(0xF0 | (cp >> 18));
-        buf[n++] = (char)(0x80 | ((cp >> 12) & 0x3F));
-        buf[n++] = (char)(0x80 | ((cp >> 6) & 0x3F));
-        buf[n++] = (char)(0x80 | (cp & 0x3F));
-    }
-    return n;
-}
-
-/* chars() -> the text typed since the last frame */
-static int h_chars(lua_State *L) {
-    char buf[256];
-    int n = 0;
-    for (int cp = GetCharPressed(); cp > 0; cp = GetCharPressed()) {
-        if (n > (int)sizeof(buf) - 5) break;
-        n = put_utf8(buf, n, cp);
-    }
-    lua_pushlstring(L, buf, (size_t)n);
-    return 1;
-}
-
-/* key(code) -> true if the key was pressed this frame */
-static int h_key(lua_State *L) {
-    lua_pushboolean(L, IsKeyPressed((int)luaL_checkinteger(L, 1)));
-    return 1;
-}
-
 /* clip(x, y, w, h) / unclip() — scissor for scroll views and canvases */
 static int h_clip(lua_State *L) {
     BeginScissorMode((int)luaL_checkinteger(L, 1), (int)luaL_checkinteger(L, 2),
@@ -245,7 +207,7 @@ static const luaL_Reg host_fns[] = {
     {"rect", h_rect}, {"outline", h_outline}, {"text", h_text},
     {"line", h_line}, {"circle", h_circle},
     {"measure", h_measure}, {"mouse", h_mouse},
-    {"chars", h_chars}, {"key", h_key}, {"wheel", h_wheel}, {"dt", h_dt},
+    {"wheel", h_wheel}, {"dt", h_dt},
     {"clip", h_clip}, {"unclip", h_unclip}, {NULL, NULL},
 };
 
