@@ -1,0 +1,365 @@
+local L=require"lui"
+L.cfg={}
+L.cfg.title="Weather"
+L.cfg.width=460
+L.cfg.height=900
+L.cfg.theme="dark"
+L.cfg.bg="#0a0f1c"
+L.cfg.accent="#7dd3fc"
+-- ── palette ────────────────────────────────────────────────────────────
+local BG      = 0x0a0f1c
+local CARD    = 0x121a2b
+local LINE    = 0x1e293b
+local TEXT    = 0xf1f5f9
+local MUTED   = 0x8391a7
+local FAINT   = 0x4b5871
+local ACCENT  = 0x7dd3fc
+-- ── state ──────────────────────────────────────────────────────────────
+local query = "Berlin"
+local place, region = "", ""
+local status = "Loading…"
+local units = "C"
+local current = nil           -- { temp, feels, humidity, wind, code, high, low }
+local hours = {}              -- next 24 hours: { label, temp }
+local days = {}               -- 5 days: { name, high, low, code }
+local t = 0                   -- animation clock
+local latest = nil          -- the newest search; older answers are dropped
+local names = {
+[0] = "Clear", [1] = "Mostly clear", [2] = "Partly cloudy", [3] = "Overcast",
+[45] = "Fog", [48] = "Freezing fog", [51] = "Light drizzle", [53] = "Drizzle",
+[55] = "Heavy drizzle", [56] = "Freezing drizzle", [57] = "Freezing drizzle",
+[61] = "Light rain", [63] = "Rain", [65] = "Heavy rain", [66] = "Freezing rain",
+[67] = "Freezing rain", [71] = "Light snow", [73] = "Snow", [75] = "Heavy snow",
+[77] = "Snow grains", [80] = "Showers", [81] = "Showers", [82] = "Heavy showers",
+[85] = "Snow showers", [86] = "Snow showers", [95] = "Thunderstorm",
+[96] = "Thunderstorm", [99] = "Thunderstorm",
+}
+local function kind(code)
+if code == nil then return "clear" end
+if code <= 1 then return "clear" end
+if code == 2 then return "partly" end
+if code == 3 then return "cloudy" end
+if code == 45 or code == 48 then return "fog" end
+if (code >= 71 and code <= 77) or code == 85 or code == 86 then return "snow" end
+if code >= 95 then return "storm" end
+return "rain"
+end
+-- Hero gradient (top, bottom) per kind of weather.
+local skies = {
+clear  = { 0x2563eb, 0x60a5fa },
+partly = { 0x3b5b8f, 0x7aa2d6 },
+cloudy = { 0x3a4a63, 0x6b7f9e },
+fog    = { 0x4b5565, 0x8a94a6 },
+rain   = { 0x1f3a5a, 0x3f6d8f },
+snow   = { 0x5b6f8f, 0xb8c7dc },
+storm  = { 0x2a2148, 0x4b3f7a },
+}
+local function mix(a, b, k)
+local function lerp(sh)
+local x, y = (a >> sh) & 255, (b >> sh) & 255
+return math.floor(x + (y - x) * k + 0.5) << sh
+end
+return lerp(16) | lerp(8) | lerp(0)
+end
+local function deg(c)
+if c == nil then return "–" end
+if units == "F" then c = c * 9 / 5 + 32 end
+return string.format("%.0f°", c)
+end
+local function weekday(iso, i)
+if i == 1 then return "Today" end
+local y, m, d = iso:match("(%d+)-(%d+)-(%d+)")
+return os.date("%A", os.time({ year = y, month = m, day = d, hour = 12 }))
+end
+-- ── drawing helpers (used by the canvases below) ───────────────────────
+local function cloud(g, x, y, s, c)
+g.circle(x - 22 * s, y + 4 * s, 18 * s, c)
+g.circle(x, y - 8 * s, 26 * s, c)
+g.circle(x + 24 * s, y + 2 * s, 20 * s, c)
+g.rect(x - 22 * s, y + 4 * s, 46 * s, 18 * s, 0, c)
+end
+-- A small weather illustration centred on (x, y); s scales it.
+local function icon(g, code, x, y, s, phase)
+local k = kind(code)
+phase = phase or 0
+if k == "clear" or k == "partly" then
+local sx, sy = x + (k == "partly" and 14 * s or 0), y - (k == "partly" and 12 * s or 0)
+for i = 0, 7 do
+local a = i * math.pi / 4 + phase * 0.3
+g.line(sx + math.cos(a) * 30 * s, sy + math.sin(a) * 30 * s,
+sx + math.cos(a) * 40 * s, sy + math.sin(a) * 40 * s, 3 * s, 0xfcd34d)
+end
+g.circle(sx, sy, 22 * s, 0xfde68a)
+if k == "partly" then cloud(g, x - 6 * s, y + 10 * s, s, 0xf8fafc) end
+return
+end
+if k == "fog" then
+for i = 0, 3 do
+g.line(x - 34 * s, y - 14 * s + i * 11 * s, x + 34 * s, y - 14 * s + i * 11 * s, 4 * s, 0xe2e8f0)
+end
+return
+end
+cloud(g, x, y - 6 * s, s, k == "storm" and 0xcbd5e1 or 0xf1f5f9)
+if k == "rain" then
+for i = -1, 1 do
+local dy = (phase * 30 + i * 9) % 16
+g.line(x + i * 16 * s, y + 22 * s + dy * s, x + i * 16 * s - 4 * s, y + 32 * s + dy * s, 3 * s, 0x93c5fd)
+end
+elseif k == "snow" then
+for i = -1, 1 do
+g.circle(x + i * 16 * s, y + 28 * s + ((phase * 14 + i * 7) % 12) * s, 3.5 * s, 0xffffff)
+end
+elseif k == "storm" then
+g.line(x + 2 * s, y + 18 * s, x - 8 * s, y + 34 * s, 4 * s, 0xfde047)
+g.line(x - 8 * s, y + 34 * s, x + 6 * s, y + 34 * s, 4 * s, 0xfde047)
+g.line(x + 6 * s, y + 34 * s, x - 4 * s, y + 50 * s, 4 * s, 0xfde047)
+end
+end
+-- A vertical gradient filling the canvas, with rounded corners of radius r:
+-- drawn in 2px rows, each row inset where it passes through a corner.
+local function gradient(g, r, top, bottom)
+local w, h = g.width, g.height
+local y = 0
+while y < h do
+local d = (y < r) and (r - y - 0.5) or (y > h - r) and (y + 0.5 - (h - r)) or 0
+local inset = d > 0 and r - math.sqrt(math.max(r * r - d * d, 0)) or 0
+local step = d > 0 and 1 or 2   -- single rows through the corners
+g.rect(inset, y, w - 2 * inset, step, 0, mix(top, bottom, y / h))
+y = y + step
+end
+end
+-- Colour for a temperature: cool blue through to warm amber.
+local function warmth(c)
+local k = math.max(0, math.min(1, (c + 5) / 35))
+return mix(0x60a5fa, 0xfbbf24, k)
+end
+-- ── data ───────────────────────────────────────────────────────────────
+local FORECAST = "https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&timezone=auto" ..
+"&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code" ..
+"&hourly=temperature_2m&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=5"
+local function apply(c, f)
+local cur = f.current
+current = {
+temp = cur.temperature_2m, feels = cur.apparent_temperature,
+humidity = cur.relative_humidity_2m, wind = cur.wind_speed_10m,
+code = cur.weather_code,
+high = f.daily.temperature_2m_max[1], low = f.daily.temperature_2m_min[1],
+}
+-- Hourly starts at the current hour.
+local first = 1
+for i, stamp in ipairs(f.hourly.time) do
+if stamp:sub(1, 13) == cur.time:sub(1, 13) then first = i break end
+end
+hours = {}
+for i = first, math.min(first + 23, #f.hourly.time) do
+local label = i == first and "Now" or f.hourly.time[i]:sub(12, 13)
+hours[#hours + 1] = { label = label, temp = f.hourly.temperature_2m[i] }
+end
+days = {}
+for i = 1, #f.daily.time do
+days[i] = {
+name = weekday(f.daily.time[i], i), code = f.daily.weather_code[i],
+high = f.daily.temperature_2m_max[i], low = f.daily.temperature_2m_min[i],
+}
+end
+place = c.name
+region = c.admin1 and (c.admin1 .. ", " .. (c.country or "")) or (c.country or "")
+status = "Updated " .. os.date("%H:%M")
+end
+function search(name)
+name = name:gsub("^%s+", ""):gsub("%s+$", "")
+if name == "" then
+status = "Type a city to search"
+return
+end
+status = "Searching for " .. name .. "…"
+local token = {}
+latest = token
+L.get("https://geocoding-api.open-meteo.com/v1/search?count=1&name=" .. L.urlencode(name), function(body)
+if latest ~= token then return end
+local geo = body and L.json(body)
+if not geo then status = "You're offline" return end
+if not geo.results then status = "No results for “" .. name .. "”" return end
+local c = geo.results[1]
+L.get(string.format(FORECAST, c.latitude, c.longitude), function(fbody)
+if latest ~= token then return end
+local f = fbody and L.json(fbody)
+if not f or not f.current then status = "Forecast unavailable" return end
+apply(c, f)
+end)
+end)
+end
+search(query)
+-- ── hero ───────────────────────────────────────────────────────────────
+local hero=L.node("canvas")
+L.root(hero)
+hero.height=280
+hero.radius=20
+L.on(hero,"frame",function(self,g,dt)t = t + dt
+end)
+L.on(hero,"draw",function(self,g,dt)local top, bottom = table.unpack(skies[kind(current and current.code)])
+gradient(g, 20, top, bottom)
+icon(g, current and current.code, g.width - 96, 92, 1.5, t)if not current then
+g.text(status, 28, 28, 16, 0xdbeafe)
+return
+end
+g.text(place, 28, 26, 24, TEXT, 1)
+g.text(region, 28, 58, 14, 0xdbeafe)
+g.text(deg(current.temp), 22, 96, 112, 0xffffff, 2)
+g.text(names[current.code] or "", 30, 220, 18, TEXT, 1)
+local hl = "H " .. deg(current.high) .. "   L " .. deg(current.low)
+g.text(hl, 30, 246, 15, 0xdbeafe)
+end)
+-- ── search ─────────────────────────────────────────────────────────────
+local _w=L.node("row")
+L.root(_w)
+local _e=L.node("input")
+L.add(_w,_e)
+_e.width=-136
+_e.placeholder="Search for a city"
+_e.text="Berlin"
+L.on(_e,"change",function(self,g,dt)query = self.text
+end)
+L.on(_e,"submit",function(self,g,dt)search(self.text)
+end)
+local _r=L.node("button")
+L.add(_w,_r)
+_r.width=60
+L.bind(_r,"bg",function()return units == "C" and "#7dd3fc" or "#1b2433" end)
+L.bind(_r,"color",function()return units == "C" and "#0a0f1c" or "#a5b4c8" end)
+_r.text="°C"
+L.on(_r,"click",function(self,g,dt)units = "C"
+end)
+local _t=L.node("button")
+L.add(_w,_t)
+_t.width=60
+L.bind(_t,"bg",function()return units == "F" and "#7dd3fc" or "#1b2433" end)
+L.bind(_t,"color",function()return units == "F" and "#0a0f1c" or "#a5b4c8" end)
+_t.text="°F"
+L.on(_t,"click",function(self,g,dt)units = "F"
+end)
+-- ── details ────────────────────────────────────────────────────────────
+local _y=L.node("table")
+L.root(_y)
+_y.columns=3
+local _u=L.node("tr")
+L.add(_y,_u)
+local _i=L.node("td")
+L.add(_u,_i)
+local _o=L.node("panel")
+L.add(_i,_o)
+_o.bg="#121a2b"
+local _p=L.node("text")
+L.add(_o,_p)
+_p.size=12
+_p.color="#8391a7"
+_p.text="FEELS LIKE"
+local _a=L.node("text")
+L.add(_o,_a)
+_a.size=24
+_a.weight=1
+L.bindtext(_a,function()return tostring(current and deg(current.feels) or '–') end)
+local _s=L.node("td")
+L.add(_u,_s)
+local _d=L.node("panel")
+L.add(_s,_d)
+_d.bg="#121a2b"
+local _f=L.node("text")
+L.add(_d,_f)
+_f.size=12
+_f.color="#8391a7"
+_f.text="HUMIDITY"
+local _g=L.node("text")
+L.add(_d,_g)
+_g.size=24
+_g.weight=1
+L.bindtext(_g,function()return tostring(current and (current.humidity .. '%') or '–') end)
+local _h=L.node("td")
+L.add(_u,_h)
+local _j=L.node("panel")
+L.add(_h,_j)
+_j.bg="#121a2b"
+local _k=L.node("text")
+L.add(_j,_k)
+_k.size=12
+_k.color="#8391a7"
+_k.text="WIND"
+local _l=L.node("text")
+L.add(_j,_l)
+_l.size=24
+_l.weight=1
+L.bindtext(_l,function()return tostring(current and string.format('%.0f km/h', current.wind) or '–') end)
+-- ── hourly ─────────────────────────────────────────────────────────────
+local hourly=L.node("canvas")
+L.root(hourly)
+hourly.height=176
+hourly.radius=16
+hourly.bg="#121a2b"
+L.on(hourly,"draw",function(self,g,dt)g.text("HOURLY", 18, 16, 12, MUTED)
+if #hours < 2 then return end
+local lo, hi = math.huge, -math.huge
+for _, h in ipairs(hours) do
+lo = math.min(lo, h.temp)
+hi = math.max(hi, h.temp)
+end
+local span = math.max(hi - lo, 1)
+local left, right, top, bottom = 22, g.width - 22, 62, g.height - 44
+local function px(i) return left + (i - 1) * (right - left) / (#hours - 1) end
+local function py(v) return bottom - (v - lo) / span * (bottom - top) end-- area under the curve, then the curve itself
+local fill = mix(CARD, ACCENT, 0.12)
+for x = left, right, 2 do
+local f = (x - left) / (right - left) * (#hours - 1) + 1
+local i = math.min(math.floor(f), #hours - 1)
+local v = hours[i].temp + (hours[i + 1].temp - hours[i].temp) * (f - i)
+g.line(x, py(v), x, bottom + 4, 2, fill)
+end
+for i = 2, #hours do
+g.line(px(i - 1), py(hours[i - 1].temp), px(i), py(hours[i].temp), 3, ACCENT)
+end
+-- labels every three hours
+for i = 1, #hours, 3 do
+local x, y = px(i), py(hours[i].temp)
+g.circle(x, y, 4, i == 1 and 0xffffff or ACCENT)
+local tl = deg(hours[i].temp)
+g.text(tl, x - g.measure(tl, 13, 1) / 2, y - 24, 13, TEXT, 1)
+local hl = hours[i].label
+g.text(hl, x - g.measure(hl, 12) / 2, g.height - 28, 12, i == 1 and TEXT or MUTED)
+end
+end)
+-- ── five days ──────────────────────────────────────────────────────────
+local week=L.node("canvas")
+L.root(week)
+week.height=252
+week.radius=16
+week.bg="#121a2b"
+L.on(week,"draw",function(self,g,dt)g.text("5-DAY FORECAST", 18, 16, 12, MUTED)
+if #days == 0 then return end
+local lo, hi = math.huge, -math.huge
+for _, d in ipairs(days) do
+lo = math.min(lo, d.low)
+hi = math.max(hi, d.high)
+end
+local span = math.max(hi - lo, 1)
+local rowH = 40
+local barL, barR = g.width * 0.48, g.width - 62
+for i, d in ipairs(days) do
+local y = 48 + (i - 1) * rowH
+if i > 1 then g.line(18, y - 8, g.width - 18, y - 8, 1, LINE) end
+g.text(d.name, 18, y + 4, 16, TEXT, i == 1 and 1 or 0)
+icon(g, d.code, g.width * 0.33, y + 12, 0.34, t)
+-- range bar: track for the week, fill for this day
+local mid = y + 13
+g.rect(barL, mid - 3, barR - barL, 6, 3, LINE)
+local a = barL + (d.low - lo) / span * (barR - barL)
+local b = barL + (d.high - lo) / span * (barR - barL)
+g.rect(a, mid - 3, math.max(b - a, 6), 6, 3, warmth((d.low + d.high) / 2))
+local low = deg(d.low)
+g.text(low, barL - 12 - g.measure(low, 15), y + 4, 15, MUTED)
+g.text(deg(d.high), barR + 12, y + 4, 15, TEXT, 1)
+end
+end)
+local _z=L.node("text")
+L.root(_z)
+_z.size=12
+_z.color="#4b5871"
+L.bindtext(_z,function()return tostring(status).."  ·  Open-Meteo" end)

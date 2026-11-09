@@ -8,6 +8,7 @@
 #include "rlImGui.h"
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>
 #include <vector>
 
 extern "C" {
@@ -15,9 +16,18 @@ extern "C" {
 #include <lauxlib.h>
 }
 
-static const char *FONT_REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
-static const char *FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
-static const char *FONT_LIGHT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-ExtraLight.ttf";
+// DejaVu Sans in three weights.  Looked up in $LUI_FONT_DIR, then in the
+// usual system font folders; ImGui's built-in font is the fallback.
+static const char *FONT_FILES[3] = {"DejaVuSans.ttf", "DejaVuSans-Bold.ttf", "DejaVuSans-ExtraLight.ttf"};
+static const char *FONT_DIRS[] = {
+    "/usr/share/fonts/truetype/dejavu",   // Debian, Ubuntu
+    "/usr/share/fonts/dejavu-sans-fonts", // Fedora
+    "/usr/share/fonts/TTF",               // Arch
+    "/usr/share/fonts/dejavu",
+    "/usr/local/share/fonts",
+    "/opt/homebrew/share/fonts",          // macOS (brew install font-dejavu)
+    "/Library/Fonts",
+};
 static const float BASE_SIZE = 17.0f;
 
 static ImFont *fonts[3];   // 0 regular, 1 bold, 2 light
@@ -46,11 +56,32 @@ static ImFont *font_for(int weight) { return fonts[weight >= 0 && weight <= 2 ? 
 
 // ── setup and theme ────────────────────────────────────────────────────
 
+// Writes the first existing "<dir>/<file>" into out; false if none exists.
+static bool find_font(const char *file, char *out, size_t cap) {
+    const char *env = getenv("LUI_FONT_DIR");
+    for (int i = -1; i < (int)(sizeof FONT_DIRS / sizeof FONT_DIRS[0]); i++) {
+        const char *dir = i < 0 ? env : FONT_DIRS[i];
+        if (!dir) continue;
+        snprintf(out, cap, "%s/%s", dir, file);
+        if (FILE *f = fopen(out, "rb")) {
+            fclose(f);
+            return true;
+        }
+    }
+    return false;
+}
+
 static void load_fonts() {
     ImGuiIO &io = ImGui::GetIO();
-    fonts[0] = io.Fonts->AddFontFromFileTTF(FONT_REGULAR, BASE_SIZE);
-    fonts[1] = io.Fonts->AddFontFromFileTTF(FONT_BOLD, BASE_SIZE);
-    fonts[2] = io.Fonts->AddFontFromFileTTF(FONT_LIGHT, BASE_SIZE);
+    char path[1024];
+    for (int i = 0; i < 3; i++) {
+        fonts[i] = find_font(FONT_FILES[i], path, sizeof path) ? io.Fonts->AddFontFromFileTTF(path, BASE_SIZE) : nullptr;
+    }
+    if (!fonts[0]) {
+        ImFontConfig cfg;
+        cfg.SizePixels = BASE_SIZE;
+        fonts[0] = io.Fonts->AddFontDefault(&cfg);
+    }
     for (ImFont *&f : fonts) if (!f) f = fonts[0];
 }
 

@@ -1,0 +1,4 @@
+<lui>
+local x = <button>
+    <on click>
+        print(1)

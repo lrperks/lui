@@ -1,5 +1,8 @@
 # Lui
 
+[![CI](https://github.com/OWNER/lui/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/lui/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Dear ImGui, written as markup. A `.lui` file is plain Lua plus XML-style tags:
 every tag is one ImGui widget, attributes set its values, and `<on>` blocks
 handle its events.
@@ -25,22 +28,32 @@ local clicks = 0
 
 ## Requirements
 
-Lui targets Linux with X11.
+Lui is developed and tested on Linux with X11.
 
-- A C compiler, `g++`, `make` and `pkg-config`
+- A C/C++ compiler, `make` and `pkg-config`
 - Lua 5.3 (`pkg-config --libs lua5.3` must work)
-- [raylib](https://www.raylib.com/), installed under `~/.local` (or set
-  `RAYLIB_PREFIX` when running `make`)
-- The DejaVu fonts (`/usr/share/fonts/truetype/dejavu/`)
+- [raylib](https://www.raylib.com/) 5.5 or newer, installed under `~/.local`
+  (or pass `RAYLIB_PREFIX=/your/prefix` to `make`)
 - `curl`, for `L.get` background requests
-- The git submodules: `git submodule update --init --recursive`
+- Optional: the DejaVu fonts. Lui looks in the usual Linux and macOS font
+  folders and in `$LUI_FONT_DIR`, and falls back to ImGui's built-in font.
 
-`make` expects a prebuilt `third_party/build/libcimgui_rl.a` (cimgui and
-rlImGui). The repository does not yet include a script that builds it.
+Dear ImGui and rlImGui are git submodules and are built from source by `make`.
+
+On Ubuntu 24.04:
+
+```bash
+sudo apt install build-essential cmake pkg-config lua5.3 liblua5.3-dev curl fonts-dejavu-core \
+    libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+git clone --depth 1 --branch 5.5 https://github.com/raysan5/raylib.git /tmp/raylib
+cmake -S /tmp/raylib -B /tmp/raylib/build -DBUILD_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX=$HOME/.local
+cmake --build /tmp/raylib/build -j && cmake --install /tmp/raylib/build
+```
 
 ## Quick start
 
 ```bash
+git clone --recursive https://github.com/OWNER/lui.git && cd lui
 make                              # builds bin/luic and bin/lui_host
 ./lui run examples/widgets.lui    # compile and open the window
 ./lui watch examples/widgets.lui  # reopen the window on every save
@@ -171,9 +184,22 @@ See `plugins/badge.lua` for a complete example.
 
 ## Tests
 
-`tools/test_click.py` opens `examples/counter.lui.lua` in a window, clicks the
-button through XTest, and checks the handler ran twice. It needs `xwininfo`,
-`libX11` and `libXtst`.
+```bash
+make test
+```
+
+compiles every example and compares the output with `tests/expected/`, checks
+it is valid Lua, and checks that the files in `tests/errors/` are rejected with
+a line number. After an intended change to the compiler's output, regenerate
+the expected files with the command in `tests/run.sh`.
+
+CI (`.github/workflows/ci.yml`) also builds raylib, runs the tests, and
+renders every example under a virtual display; the screenshots are uploaded
+as a build artifact.
+
+`tools/test_click.py` opens `examples/counter.lui.lua` in a real window,
+clicks the button through XTest, and checks the handler ran twice. It needs
+`xwininfo`, `libX11` and `libXtst`.
 
 ```bash
 ./bin/luic examples/counter.lui
@@ -182,4 +208,4 @@ python3 tools/test_click.py examples/counter.lui.lua
 
 ## License
 
-Not chosen yet.
+[MIT](LICENSE)

@@ -1,6 +1,6 @@
 # Build output
 bin/
-third_party/build/
+build/
 *.o
 
 # Generated Lua from .lui files

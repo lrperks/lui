@@ -1,38 +1,64 @@
-# Lui build.  `make` builds bin/luic and bin/lui_host.
+# Lui build.
 #
-#   make             build everything
-#   make clean       remove build output
+#   make            build bin/luic and bin/lui_host
+#   make test       compile every example and compare with tests/expected
+#   make clean      remove build output
 #
-# lui_host needs raylib, Lua 5.3 and the cimgui/rlImGui build in third_party/build.
+# Needs a C/C++ compiler, Lua 5.3 (pkg-config lua5.3) and raylib.  Dear ImGui
+# and rlImGui are git submodules: git submodule update --init
 
 RAYLIB_PREFIX ?= $(HOME)/.local
-
 PKG_CONFIG_PATH := $(RAYLIB_PREFIX)/lib/pkgconfig:$(PKG_CONFIG_PATH)
 export PKG_CONFIG_PATH
 
+CC  ?= gcc
+CXX ?= g++
+CFLAGS   ?= -O2
+CXXFLAGS ?= -O2
+
 LUA_CFLAGS := $(shell pkg-config --cflags lua5.3)
 LUA_LIBS   := $(shell pkg-config --libs lua5.3)
-IMGUI_INC  := third_party/cimgui/imgui third_party/rlImGui
-LIBS       := -L$(RAYLIB_PREFIX)/lib -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lstdc++
+RAYLIB_INC := -I$(RAYLIB_PREFIX)/include
+LIBS       := -L$(RAYLIB_PREFIX)/lib -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+
+IMGUI   := third_party/imgui
+RLIMGUI := third_party/rlImGui
+GUI_INC := -I$(IMGUI) -I$(RLIMGUI) $(RAYLIB_INC)
+GUI_SRC := $(IMGUI)/imgui.cpp $(IMGUI)/imgui_draw.cpp $(IMGUI)/imgui_tables.cpp \
+           $(IMGUI)/imgui_widgets.cpp $(RLIMGUI)/rlImGui.cpp
+GUI_OBJ := $(patsubst %.cpp,build/%.o,$(notdir $(GUI_SRC)))
 
 all: bin/luic bin/lui_host
 
 bin/luic: src/luic.c
 	@mkdir -p bin
-	gcc -O2 -Wall -Wextra -o $@ $<
+	$(CC) $(CFLAGS) -Wall -Wextra -o $@ $<
 
-bin/lui_host: src/lui_host.o src/lui_imgui.o third_party/build/libcimgui_rl.a
+bin/lui_host: build/lui_host.o build/lui_imgui.o $(GUI_OBJ)
 	@mkdir -p bin
-	g++ -o $@ src/lui_host.o src/lui_imgui.o third_party/build/libcimgui_rl.a $(LUA_LIBS) $(LIBS)
+	$(CXX) -o $@ $^ $(LUA_LIBS) $(LIBS)
 
-src/lui_host.o: src/lui_host.c
-	gcc -O2 -Wall -c -o $@ $< $(LUA_CFLAGS) -I$(RAYLIB_PREFIX)/include
+build/lui_host.o: src/lui_host.c
+	@mkdir -p build
+	$(CC) $(CFLAGS) -Wall -Wextra -c -o $@ $< $(LUA_CFLAGS) $(RAYLIB_INC)
 
-src/lui_imgui.o: src/lui_imgui.cpp
-	g++ -O2 -Wall -c -o $@ $< $(LUA_CFLAGS) $(addprefix -I,$(IMGUI_INC)) -I$(RAYLIB_PREFIX)/include
+build/lui_imgui.o: src/lui_imgui.cpp
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -Wall -c -o $@ $< $(LUA_CFLAGS) $(GUI_INC)
+
+# Third-party sources: built once, without our warning flags.
+build/%.o: $(IMGUI)/%.cpp
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -c -o $@ $< $(GUI_INC)
+
+build/%.o: $(RLIMGUI)/%.cpp
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -c -o $@ $< $(GUI_INC)
+
+test: bin/luic
+	@sh tests/run.sh
 
 clean:
-	rm -rf bin
-	rm -f src/*.o
+	rm -rf bin build
 
-.PHONY: all clean
+.PHONY: all test clean
