@@ -1,14 +1,19 @@
 # Lui
 
-A GUI runtime where markup and logic live in one file. Write elements
-(`<panel>`, `<button>`, `<input>`, …) and Lua together; Lui builds the window
-on raylib.
+Dear ImGui, written as markup. A `.lui` file is plain Lua plus XML-style tags:
+every tag is one ImGui widget, attributes set its values, and `<on>` blocks
+handle its events.
+
+Lui keeps ImGui's speed and widget set, and adds a cleaner default theme,
+retained state, data binding, and background HTTP requests.
+
+![The weather example](docs/weather.png)
 
 ```xml
-<lui title="Counter" width=420 height=200 theme="dark" accent="#22c55e">
-let clicks = 0
+<lui title="Counter" width=360 height=160>
+local clicks = 0
 
-let button = <button>
+<button>
     "Clicked {clicks} times"
     <on click>
         clicks = clicks + 1
@@ -18,97 +23,163 @@ let button = <button>
 </lui>
 ```
 
-## Use
+## Requirements
+
+Lui targets Linux with X11.
+
+- A C compiler, `g++`, `make` and `pkg-config`
+- Lua 5.3 (`pkg-config --libs lua5.3` must work)
+- [raylib](https://www.raylib.com/), installed under `~/.local` (or set
+  `RAYLIB_PREFIX` when running `make`)
+- The DejaVu fonts (`/usr/share/fonts/truetype/dejavu/`)
+- `curl`, for `L.get` background requests
+- The git submodules: `git submodule update --init --recursive`
+
+`make` expects a prebuilt `third_party/build/libcimgui_rl.a` (cimgui and
+rlImGui). The repository does not yet include a script that builds it.
+
+## Quick start
 
 ```bash
-./lui run counter.lui      # compile and open
-./lui watch counter.lui    # reopen the window on every save
-./lui build counter.lui    # compile only -> counter.lui.lua
+make                              # builds bin/luic and bin/lui_host
+./lui run examples/widgets.lui    # compile and open the window
+./lui watch examples/widgets.lui  # reopen the window on every save
 ```
+
+`./lui build app.lui` compiles to `app.lui.lua` without opening a window.
+Any `plugins/*.lua` next to the `.lui` file is loaded first.
+
+Screenshots without a window: `LUI_SHOT=out.png LUI_SHOT_FRAMES=120` saves the
+frame after that many frames and exits.
+
+## Markup
+
+- Everything outside a tag is Lua. `local name = <tag>…</tag>` binds an element
+  to a Lua local, so handlers can change it (`name.text = "…"`).
+- Elements are `<name> children </name>` or self-closing `<name />`. Names are
+  case-sensitive.
+- Attributes go inside the opening tag:
+  - `key=12` or `key=1.5`: a number
+  - `key="text"`: a string
+  - `key={lua-expr}`: a Lua expression, re-evaluated every frame
+  - `key`: a bare name means `true`
+- A quoted string inside a tag is its text. `"Hi {name}"` interpolates Lua.
+- `<on EVENT> … </on>` runs Lua when the event fires. The handler receives the
+  element as `self`.
+- `<!-- … -->` is a comment.
 
 ## Elements
 
-| Tag | Purpose | Attributes | Events |
+| Tag | ImGui | Attributes | Events |
 |---|---|---|---|
-| `column` | stacks children vertically (default container) | `gap`, `pad`, `align` | |
-| `row` | stacks children horizontally | `gap`, `pad`, `align` | |
-| `panel` | card with surface colour, border, rounded corners | `bg`, `border`, `gap`, `pad`, `radius` | |
-| `label` | text; `"{expr}"` updates each frame | `size`, `weight`, `color` | |
-| `button` | clickable; hover and press shading | `bg`, `color`, `size`, `radius`, `weight` | `click`, `press`, `release`, `hover`, `leave` |
-| `input` | single-line text field | `placeholder`, `width`, `text` | `change`, `submit` |
-| `checkbox` | box with a label | `checked`, `bg` (fill colour) | `change`, `click` |
+| `text` / `label` | Text | `wrap` | |
+| `button` | Button | `width`, `height`, `bg` | `click` |
+| `input` | InputText | `label`, `placeholder`, `width`, `height` (multi-line) | `change`, `submit` |
+| `checkbox` | Checkbox | `label`, `checked` | `change` |
+| `radio` | RadioButton | `label`, `checked` | `click` |
+| `slider` | SliderFloat / SliderInt | `label`, `value`, `min`, `max`, `format`, `int` | `change` |
+| `drag` | DragFloat | `label`, `value`, `speed`, `min`, `max`, `format` | `change` |
+| `combo` | Combo | `label`, `items`, `selected` | `change` |
+| `color` | ColorEdit3 | `label`, `value` | `change` |
+| `progress` | ProgressBar | `value` (0–1), `text` overlay | |
+| `plot` | PlotLines / PlotHistogram | `label`, `values`, `width`, `height`, `histogram` | |
+| `selectable` | Selectable | `label`, `selected` | `click` |
+| `separator` | Separator / SeparatorText | `text` | |
+| `spacer` | Dummy | `width`, `height` | |
+| `row` | SameLine between children | `gap` | |
+| `column` / `group` | BeginGroup | | |
+| `panel` | BeginChild, fits its content | `width`, `height`, `bg`, `border` | |
+| `scroll` | BeginChild, scrolls | `height` (default 200), `bg`, `border` | |
+| `window` | Begin | `title`, `width`, `height`, `x`, `y` | |
+| `tabs` / `tab` | TabBar / TabItem | `label` (on `tab`) | |
+| `tree` | TreeNode | `label`, `open` | |
+| `collapse` | CollapsingHeader | `label`, `open` | |
+| `menubar` / `menu` / `item` | MenuBar / Menu / MenuItem | `label` (`menu`, `item`), `shortcut`, `checked` | `click` (`item`) |
+| `table` / `tr` / `td` | Table | `columns` (`"A,B"` or a count), `border` | |
+| `canvas` | draw list | `width`, `height`, `bg`, `radius` | `draw`, `click` |
 
-Every element also takes `width` and `height`. `align` is `start`, `center`,
-or `stretch`. Colours are `#rgb`, `#rrggbb`, or a name (`white`, `red`, …).
+Every element also takes:
 
-## Window (`<lui>`)
+- `color`: text colour
+- `size` and `weight` (0 regular, 1 bold, 2 light): font
+- `tooltip`: text shown on hover
+- `hover`, `leave`: fire when the pointer enters or leaves the element
+- `frame`: runs every frame. Its second argument is the frame time in seconds.
 
-| Attribute | Default |
-|---|---|
-| `title` | `Lui` |
-| `width`, `height` | `480`, `300` |
-| `theme` | `light` (or `dark`) |
-| `accent` | the theme's accent |
-| `bg` | the theme's background |
-| `resizable` | `true`; set `false` to lock the size |
+Colours can be `"#rgb"`, `"#rrggbb"`, a name (`red`, `green`, `blue`, `gray`,
+`yellow`, `orange`, `white`, `black`), or a number `0xRRGGBB`.
 
-## Events
+### Window
 
-Each `<on EVENT>` body is Lua. Inside it, `self` is the element that fired.
-Use the element's `let` name when you need to reach it from elsewhere.
+The `<lui>` tag configures the app: `title`, `width`, `height`,
+`theme` (`dark` by default, or `light`), `accent`, `bg`, and `resizable`
+(`true` by default). Top-level elements that are not `<window>`s fill the
+screen. `<window>`s float on top.
 
-## Files
+## Drawing
 
-- `luic.km` — the compiler (Komodo): `.lui` → Lua
-- `lui.lua` — the runtime: tree, layout, input, themes, drawing
-- `lui_host.c` — the raylib host that runs the Lua
-- `lui` — the command-line entry point
-- `test_click.py` — clicks the counter demo and checks its log
+A `<canvas>` `draw` handler gets `g`:
 
-## Extending Lui
+- `g.rect(x, y, w, h, radius, color, alpha)`
+- `g.outline(x, y, w, h, radius, color, thickness)`
+- `g.gradient(x, y, w, h, top, bottom)`
+- `g.line(x1, y1, x2, y2, thickness, color)`
+- `g.circle(x, y, r, color, alpha)`
+- `g.text(s, x, y, size, color, weight)`
+- `g.measure(s, size, weight)` returns the width of `s`
+- `g.width`, `g.height`
 
-Any `plugins/*.lua` beside a `.lui` file is loaded before the app. A plugin
-adds element types with `lui.define`:
+Coordinates are relative to the canvas.
+
+## Data and background requests
+
+- `L.get(url, callback)` fetches a URL without blocking the window. It calls
+  `callback(body)` on success or `callback(nil, message)` on failure.
+- `L.json(text)` decodes JSON (`null` becomes `nil`). It returns `nil, message`
+  on bad input.
+- `L.urlencode(s)` escapes a query value.
+
+## Custom elements
+
+Plugins add elements with `L.define`. An element is drawn on its own canvas:
 
 ```lua
-local L = require("lui")
-
 L.define("badge", {
-    measure = function(n)                  -- size the element: return w, h
-        return L.measure(n.text, n.size, 1) + 16, n.size + 8
-    end,
-    draw = function(n, g)                  -- paint it; g is relative to the element
-        g.rect(0, 0, n.w, n.h, n.h // 2, L.color(n.bg, 0x3b82f6))
-        g.text(n.text, 8, 4, n.size, L.color(n.fg, 0xffffff))
-    end,
+    measure = function(n) return L.measure(n.text, 14, 1) + 18, 24 end,
+    draw = function(n, g) g.rect(0, 0, g.width, g.height, g.height / 2, L.color(n.bg, 0x3b82f6)) end,
 })
 ```
 
-Then `<badge bg="#22c55e">"New"</badge>` works in any `.lui` file. A spec may
-set `container = true` to also lay out and draw child elements. Events, binds,
-and attributes work on custom elements the same way as on built-in ones.
+See `plugins/badge.lua` for a complete example.
 
-Other hooks: `<canvas>` with `<on draw>` for free drawing, `<on frame>` for
-per-frame logic (`dt` is the frame time), and `<scroll>` for clipped, wheel-
-scrollable content.
+## How it works
 
-## Data and network
+- `src/luic.c` compiles `.lui` into a Lua chunk that builds the element tree
+  and registers the handlers. The output is minified.
+- `src/lui.lua` runs in Lua 5.3 and walks the element tree every frame,
+  calling ImGui through the `ig` table.
+- `src/lui_imgui.cpp` binds the `ig` table to Dear ImGui and sets the theme.
+- `src/lui_host.c` owns the raylib window, the frame loop, and background HTTP
+  (curl on worker threads).
 
-- `L.fetch(url)` runs `curl` and returns the body, or `nil` and a message. It
-  blocks until the request finishes.
-- `L.json(text)` decodes JSON into Lua tables, or returns `nil` and a message.
-- `L.urlencode(s)` escapes a query value.
+## Examples
 
-`weather.lui` is a complete app built on these: it looks up a city with
-Open-Meteo (no API key), shows the current temperature and conditions, and
-draws the hourly temperatures on a canvas.
+- `examples/widgets.lui`: every element
+- `examples/weather.lui`: background requests and a live layout (needs network)
+- `examples/demo.lui`, `examples/counter.lui`, `examples/canvas.lui`,
+  `examples/badges.lui`: smaller samples
+
+## Tests
+
+`tools/test_click.py` opens `examples/counter.lui.lua` in a window, clicks the
+button through XTest, and checks the handler ran twice. It needs `xwininfo`,
+`libX11` and `libXtst`.
 
 ```bash
-./lui run weather.lui
+./bin/luic examples/counter.lui
+python3 tools/test_click.py examples/counter.lui.lua
 ```
 
-## Resizing
+## License
 
-Windows are resizable by default (minimum 240×160). Root elements stretch to
-the window width and re-lay out on every resize, so content, scroll views,
-and canvases follow the window.
+Not chosen yet.

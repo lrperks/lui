@@ -15,10 +15,11 @@ build() { "$here/bin/luic" "$file"; }
 # Every plugins/*.lua beside the .lui file is loaded before the app.
 plugins=("$(dirname "$file")"/plugins/*.lua)
 [[ -e "${plugins[0]}" ]] || plugins=()
+hostcmd=("$here/bin/lui_host" "$file.lua" "$here/src/lui.lua" "${plugins[@]}")
 
 case "$cmd" in
   build) build ;;
-  run)   build && "$here/bin/lui_host" "$file.lua" "$here/src/lui.lua" "${plugins[@]}" ;;
+  run)   build && "${hostcmd[@]}" ;;
   watch)
     stamp() { stat -c %Y "$file" "$here/src/lui.lua" "$here/bin/luic" 2>/dev/null | tr '\n' ' '; }
     last=""
@@ -29,7 +30,7 @@ case "$cmd" in
         last="$now"
         [[ -n "$host_pid" ]] && kill "$host_pid" 2>/dev/null && wait "$host_pid" 2>/dev/null || true
         if build; then
-          "$here/bin/lui_host" "$file.lua" "$here/src/lui.lua" "${plugins[@]}" &
+          "${hostcmd[@]}" &
           host_pid=$!
         else
           echo "lui: build failed, fix the error and save again" >&2

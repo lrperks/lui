@@ -1,11 +1,10 @@
-<lui title="Counter" width=480 height=200>
-let clicks = 0
+<lui title="Counter" width=360 height=160>
+local clicks = 0
 
-let button = <button>
-    "Click me"
+<button>
+    "Clicked {clicks} times"
     <on click>
         clicks = clicks + 1
-        button.text = "Clicks: " .. clicks
     </on>
 </button>
 

@@ -1,9 +1,9 @@
 <lui title="Lui demo" width=420 height=420 theme="dark" accent="#22c55e">
-let clicks = 0
-let name = ""
+local clicks = 0
+local name = ""
 
-let card = <panel gap=14>
-    let heading = <label size=24 weight=1>
+local card = <panel gap=14>
+    local heading = <label size=24 weight=1>
         "Hello, {name}!"
     </label>
 

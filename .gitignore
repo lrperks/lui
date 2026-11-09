@@ -1,10 +1,7 @@
 # Build output
 bin/
 third_party/build/
-src/*.asm
-src/*.o
-src/*.deps
-src/*.links
+*.o
 
 # Generated Lua from .lui files
 *.lui.lua

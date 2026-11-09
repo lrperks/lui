@@ -1,0 +1,131 @@
+<lui title="Lui widgets" width=980 height=720 accent="#8b5cf6">
+local volume = 0.6
+local name = ""
+local log = {}
+
+local function note(s)
+    table.insert(log, 1, os.date("%H:%M:%S  ") .. s)
+    if #log > 8 then table.remove(log) end
+end
+
+<menubar>
+    <menu label="File">
+        <item label="New" shortcut="Ctrl+N">
+            <on click>
+                note("New file")
+            </on>
+        </item>
+        <item label="Open…" shortcut="Ctrl+O">
+            <on click>
+                note("Open")
+            </on>
+        </item>
+        <separator/>
+        <item label="Quit">
+            <on click>
+                os.exit(0)
+            </on>
+        </item>
+    </menu>
+    <menu label="View">
+        <item label="Dark mode" checked/>
+    </menu>
+</menubar>
+
+<tabs>
+    <tab label="Controls">
+        <separator text="Input"/>
+        <input placeholder="Your name">
+            <on change>
+                name = self.text
+            </on>
+        </input>
+        <text>"Hello, {name ~= '' and name or 'stranger'}!"</text>
+
+        <separator text="Values"/>
+        <slider label="Volume" value=0.6 min=0 max=1>
+            <on change>
+                volume = self.value
+            </on>
+        </slider>
+        <progress value={volume}>"{math.floor(volume * 100)}%"</progress>
+        <drag label="Speed" value=1.5 speed=0.05 min=0 max=10/>
+        <combo label="Quality" items={ {"Low", "Medium", "High", "Ultra"} } selected=3>
+            <on change>
+                note("Quality: " .. self.items[self.selected])
+            </on>
+        </combo>
+        <color label="Accent" value="#8b5cf6"/>
+
+        <separator text="Choices"/>
+        <row>
+            <checkbox label="Notifications" checked>
+                <on change>
+                    note("Notifications " .. (self.checked and "on" or "off"))
+                </on>
+            </checkbox>
+            <checkbox label="Auto-update"/>
+        </row>
+        <row>
+            <button tooltip="Saves your changes">
+                "Save"
+                <on click>
+                    note("Saved")
+                </on>
+            </button>
+            <button bg="#334155">
+                "Cancel"
+                <on click>
+                    note("Cancelled")
+                </on>
+            </button>
+        </row>
+    </tab>
+
+    <tab label="Data">
+        <table columns="Name,Kind,Size" border>
+            <tr><td>"lui.lua"</td><td>"runtime"</td><td>"14 KB"</td></tr>
+            <tr><td>"luic.c"</td><td>"compiler"</td><td>"13 KB"</td></tr>
+            <tr><td>"lui_imgui.cpp"</td><td>"bindings"</td><td>"16 KB"</td></tr>
+        </table>
+        <plot label="##fps" height=90 values={ {60, 58, 61, 59, 45, 52, 60, 62, 61, 59, 57, 60} }/>
+        <tree label="Project" open>
+            <tree label="src">
+                <selectable label="lui.lua"/>
+                <selectable label="luic.c"/>
+            </tree>
+            <tree label="examples">
+                <selectable label="widgets.lui"/>
+            </tree>
+        </tree>
+    </tab>
+
+    <tab label="Canvas">
+        <canvas height=220 bg="#181b22">
+            <on draw>
+                local t = os.clock()
+                for i = 0, 11 do
+                    local x = 40 + i * (g.width - 80) / 11
+                    local y = g.height / 2 + math.sin(t * 3 + i * 0.6) * 60
+                    g.circle(x, y, 10, "#8b5cf6")
+                end
+                g.text("Drawn with the canvas API", 16, 14, 15, "#9ca3af")
+            </on>
+        </canvas>
+    </tab>
+</tabs>
+
+<collapse label="Activity" open>
+    <scroll height=140>
+        <text>"{#log == 0 and 'Nothing yet — try the controls.' or table.concat(log, '\n')}"</text>
+    </scroll>
+</collapse>
+
+<window title="Inspector" width=260 height=220>
+    <text>"Floating ImGui window"</text>
+    <separator/>
+    <text>"Volume: {string.format('%.2f', volume)}"</text>
+    <checkbox label="Pin"/>
+</window>
+
+</lui>

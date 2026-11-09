@@ -4,11 +4,12 @@ local L = require("lui")
 
 L.define("badge", {
     measure = function(n)
-        local tw = L.measure(n.text, n.size, 1)
-        return tw + 16, n.size + 8
+        local size = n.size or 14
+        return L.measure(n.text, size, 1) + 18, size + 10
     end,
     draw = function(n, g)
-        g.rect(0, 0, n.w, n.h, n.h // 2, L.color(n.bg, 0x3b82f6))
-        g.text(n.text, 8, 4, n.size, L.color(n.fg, 0xffffff))
+        local size = n.size or 14
+        g.rect(0, 0, g.width, g.height, g.height / 2, L.color(n.bg, 0x3b82f6))
+        g.text(n.text, 9, 5, size, L.color(n.color, 0xffffff), 1)
     end,
 })

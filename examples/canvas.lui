@@ -1,7 +1,7 @@
 <lui title="Canvas and scroll" width=520 height=420 theme="dark">
-let t = 0
+local t = 0
 
-let view = <canvas width=480 height=200>
+local view = <canvas width=480 height=200>
     <on frame>
         t = t + dt
     </on>
@@ -13,7 +13,7 @@ let view = <canvas width=480 height=200>
     </on>
 </canvas>
 
-let list = <scroll width=480 height=180 bg="#1c1f26">
+local list = <scroll width=480 height=180 bg="#1c1f26">
     <label>"Row 1"</label>
     <label>"Row 2"</label>
     <label>"Row 3"</label>
