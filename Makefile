@@ -1,11 +1,13 @@
 # Lui build.
 #
-#   make            build bin/luic and bin/lui_host
-#   make test       compile every example and compare with tests/expected
-#   make clean      remove build output
+#   make                    build bin/lui (and bin/luic, the bare compiler)
+#   make test               compile every example and compare with tests/expected
+#   make install            install lui to $(PREFIX)/bin (default /usr/local)
+#   make install PREFIX=~/.local
+#   make clean              remove build output
 #
-# Needs a C/C++ compiler, Lua 5.3 (pkg-config lua5.3) and raylib.  Dear ImGui
-# and rlImGui are git submodules: git submodule update --init
+# Needs a C/C++ compiler, Lua 5.3 or 5.4, and raylib (./install.sh sets all of
+# this up).  Dear ImGui and rlImGui are git submodules: git submodule update --init
 
 RAYLIB_PREFIX ?= $(HOME)/.local
 PKG_CONFIG_PATH := $(RAYLIB_PREFIX)/lib/pkgconfig:$(PKG_CONFIG_PATH)
@@ -16,8 +18,11 @@ CXX ?= g++
 CFLAGS   ?= -O2
 CXXFLAGS ?= -O2
 
-LUA_CFLAGS := $(shell pkg-config --cflags lua5.3)
-LUA_LIBS   := $(shell pkg-config --libs lua5.3)
+# Lua 5.3 or 5.4, under whichever name the distribution uses.
+LUA_PC     := $(firstword $(foreach p,lua5.4 lua-5.4 lua54 lua5.3 lua-5.3 lua53 lua,\
+                  $(shell pkg-config --exists $(p) && echo $(p))))
+LUA_CFLAGS := $(shell pkg-config --cflags $(LUA_PC))
+LUA_LIBS   := $(shell pkg-config --libs $(LUA_PC))
 RAYLIB_INC := -I$(RAYLIB_PREFIX)/include
 LIBS       := -L$(RAYLIB_PREFIX)/lib -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
 
@@ -28,19 +33,30 @@ GUI_SRC := $(IMGUI)/imgui.cpp $(IMGUI)/imgui_draw.cpp $(IMGUI)/imgui_tables.cpp 
            $(IMGUI)/imgui_widgets.cpp $(RLIMGUI)/rlImGui.cpp
 GUI_OBJ := $(patsubst %.cpp,build/%.o,$(notdir $(GUI_SRC)))
 
-all: bin/luic bin/lui_host
+PREFIX ?= /usr/local
 
-bin/luic: src/luic.c
-	@mkdir -p bin
-	$(CC) $(CFLAGS) -Wall -Wextra -o $@ $<
+all: bin/lui bin/luic
 
-bin/lui_host: build/lui_host.o build/lui_imgui.o $(GUI_OBJ)
+bin/lui: build/main.o build/luic.o build/runtime.o build/lui_imgui.o $(GUI_OBJ)
 	@mkdir -p bin
 	$(CXX) -o $@ $^ $(LUA_LIBS) $(LIBS)
 
-build/lui_host.o: src/lui_host.c
+bin/luic: src/luic.c src/luic.h
+	@mkdir -p bin
+	$(CC) $(CFLAGS) -Wall -Wextra -DLUIC_MAIN -o $@ src/luic.c
+
+build/main.o: src/main.c src/luic.h
 	@mkdir -p build
 	$(CC) $(CFLAGS) -Wall -Wextra -c -o $@ $< $(LUA_CFLAGS) $(RAYLIB_INC)
+
+build/luic.o: src/luic.c src/luic.h
+	@mkdir -p build
+	$(CC) $(CFLAGS) -Wall -Wextra -c -o $@ $<
+
+# The runtime is embedded in the binary (see src/runtime.S).
+build/runtime.o: src/runtime.S src/lui.lua
+	@mkdir -p build
+	$(CC) -c -o $@ src/runtime.S
 
 build/lui_imgui.o: src/lui_imgui.cpp
 	@mkdir -p build
@@ -58,7 +74,14 @@ build/%.o: $(RLIMGUI)/%.cpp
 test: bin/luic
 	@sh tests/run.sh
 
+install: bin/lui
+	install -d $(DESTDIR)$(PREFIX)/bin
+	install -m 755 bin/lui $(DESTDIR)$(PREFIX)/bin/lui
+
+uninstall:
+	rm -f $(DESTDIR)$(PREFIX)/bin/lui
+
 clean:
 	rm -rf bin build
 
-.PHONY: all test clean
+.PHONY: all test install uninstall clean
