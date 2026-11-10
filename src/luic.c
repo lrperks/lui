@@ -6,6 +6,9 @@
  *   ./bin/luic counter.lui            writes counter.lui.lua
  *   ./bin/luic counter.lui out.lua    writes out.lua
  */
+#include "luic.h"
+
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -56,14 +59,17 @@ static int line = 1;
 static int counter;
 static Buf out;
 
+static jmp_buf on_error;
+static char error_msg[512];
+
+/* Records "line N: message" and abandons the compile. */
 static void fail(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    fprintf(stderr, "luic: line %d: ", line);
-    vfprintf(stderr, fmt, ap);
-    fputc('\n', stderr);
+    int n = snprintf(error_msg, sizeof error_msg, "line %d: ", line);
+    vsnprintf(error_msg + n, sizeof error_msg - (size_t)n, fmt, ap);
     va_end(ap);
-    exit(1);
+    longjmp(on_error, 1);
 }
 
 static char look(size_t k) { return pos + k < src_len ? src[pos + k] : '\0'; }
@@ -422,6 +428,26 @@ static void parse_top(void) {
     }
 }
 
+char *luic_compile(const char *source, size_t len, size_t *out_len, const char **error) {
+    src = source;
+    src_len = len;
+    pos = 0;
+    line = 1;
+    counter = 0;
+    out = (Buf){0};
+    if (setjmp(on_error)) {
+        free(out.s);
+        if (error) *error = error_msg;
+        return NULL;
+    }
+    buf_puts(&out, "local L=require\"lui\"\n");
+    parse_top();
+    if (out_len) *out_len = out.len;
+    return out.s;
+}
+
+#ifdef LUIC_MAIN
+/* Command line: luic file.lui [out.lua]  (out defaults to file.lui.lua) */
 static char *read_file(const char *path, size_t *len) {
     FILE *f = fopen(path, "rb");
     if (!f) { perror(path); exit(1); }
@@ -445,14 +471,19 @@ int main(int argc, char **argv) {
     if (argc > 2) snprintf(output, sizeof output, "%s", argv[2]);
     else snprintf(output, sizeof output, "%s.lua", argv[1]);
 
-    src = read_file(argv[1], &src_len);
-    buf_puts(&out, "local L=require\"lui\"\n");
-    parse_top();
-
+    size_t len, out_len;
+    const char *error;
+    char *source = read_file(argv[1], &len);
+    char *lua = luic_compile(source, len, &out_len, &error);
+    if (!lua) {
+        fprintf(stderr, "luic: %s\n", error);
+        return 1;
+    }
     FILE *f = fopen(output, "wb");
     if (!f) { perror(output); return 1; }
-    fwrite(buf_str(&out), 1, out.len, f);
+    fwrite(lua, 1, out_len, f);
     fclose(f);
     printf("wrote %s\n", output);
     return 0;
 }
+#endif

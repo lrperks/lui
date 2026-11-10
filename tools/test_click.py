@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Clicks the counter button in a running lui_host window and saves a screenshot.
+"""Clicks the counter button in a running lui window and checks the handler ran.
 
-Usage: python3 tools/test_click.py examples/counter.lui.lua
+Usage: python3 tools/test_click.py examples/counter.lui
 Clicks through XTest (libXtst, via ctypes) and reads the host log, which
 lui.lua writes to stderr when LUI_DEBUG is set.
 """
 import ctypes, os, re, subprocess, sys, time
 
-chunk = sys.argv[1]
+app = sys.argv[1]
 x11 = ctypes.CDLL("libX11.so.6")
 xtst = ctypes.CDLL("libXtst.so.6")
 x11.XOpenDisplay.restype = ctypes.c_void_p
@@ -17,7 +17,7 @@ xtst.XTestFakeMotionEvent.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_in
 xtst.XTestFakeButtonEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-host = subprocess.Popen([os.path.join(ROOT, "bin/lui_host"), chunk, os.path.join(ROOT, "src/lui.lua")], env={**os.environ, "LUI_DEBUG": "1"}, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+host = subprocess.Popen([os.path.join(ROOT, "bin/lui"), "run", app], env={**os.environ, "LUI_DEBUG": "1"}, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 time.sleep(2.0)
 
 # The client window is the child named "Counter" (the WM frame has the same

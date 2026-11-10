@@ -1,6 +1,6 @@
 # Lui
 
-[![CI](https://github.com/OWNER/lui/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/lui/actions/workflows/ci.yml)
+[![CI](https://github.com/lrperks/lui/actions/workflows/ci.yml/badge.svg)](https://github.com/lrperks/lui/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Dear ImGui, written as markup. A `.lui` file is plain Lua plus XML-style tags:
@@ -26,44 +26,42 @@ local clicks = 0
 </lui>
 ```
 
-## Requirements
-
-Lui is developed and tested on Linux with X11.
-
-- A C/C++ compiler, `make` and `pkg-config`
-- Lua 5.3 (`pkg-config --libs lua5.3` must work)
-- [raylib](https://www.raylib.com/) 5.5 or newer, installed under `~/.local`
-  (or pass `RAYLIB_PREFIX=/your/prefix` to `make`)
-- `curl`, for `L.get` background requests
-- Optional: the DejaVu fonts. Lui looks in the usual Linux and macOS font
-  folders and in `$LUI_FONT_DIR`, and falls back to ImGui's built-in font.
-
-Dear ImGui and rlImGui are git submodules and are built from source by `make`.
-
-On Ubuntu 24.04:
+## Install
 
 ```bash
-sudo apt install build-essential cmake pkg-config lua5.3 liblua5.3-dev curl fonts-dejavu-core \
-    libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
-git clone --depth 1 --branch 5.5 https://github.com/raysan5/raylib.git /tmp/raylib
-cmake -S /tmp/raylib -B /tmp/raylib/build -DBUILD_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX=$HOME/.local
-cmake --build /tmp/raylib/build -j && cmake --install /tmp/raylib/build
+git clone --recursive https://github.com/lrperks/lui.git
+cd lui
+./install.sh
 ```
 
-## Quick start
+`install.sh` installs the build dependencies with your package manager (apt,
+dnf or pacman), builds raylib if it isn't installed, and puts a single `lui`
+command in `~/.local/bin`. Use `--prefix /usr/local` to install elsewhere, or
+`--no-deps` if you have the dependencies already.
+
+Lui is developed and tested on Linux with X11. It needs a C/C++ compiler,
+Lua 5.3 or 5.4, [raylib](https://www.raylib.com/) 5.5+, and `curl` (for
+`L.get`). Dear ImGui and rlImGui come with the repository as submodules. The
+DejaVu fonts are used when installed; set `$LUI_FONT_DIR` to point elsewhere.
+
+To build by hand instead: `make` (pass `RAYLIB_PREFIX=…` if raylib isn't in
+`~/.local`), then `make install PREFIX=~/.local`.
+
+## Usage
 
 ```bash
-git clone --recursive https://github.com/OWNER/lui.git && cd lui
-make                              # builds bin/luic and bin/lui_host
-./lui run examples/widgets.lui    # compile and open the window
-./lui watch examples/widgets.lui  # reopen the window on every save
+lui new hello          # create hello.lui from a starter template
+lui watch hello.lui    # open it; every save reloads the window
+lui run app.lui        # open an app (also: lui app.lui)
+lui build app.lui      # compile to app.lui.lua without opening a window
 ```
 
-`./lui build app.lui` compiles to `app.lui.lua` without opening a window.
-Any `plugins/*.lua` next to the `.lui` file is loaded first.
+`lui watch` reports compile errors as `file:line: message` and waits for the
+next save. Lua files in a `plugins/` folder next to the app are loaded first
+(see [Custom elements](#custom-elements)).
 
-Screenshots without a window: `LUI_SHOT=out.png LUI_SHOT_FRAMES=120` saves the
-frame after that many frames and exits.
+`LUI_SHOT=out.png lui run app.lui` saves a screenshot after 120 frames
+(`LUI_SHOT_FRAMES` to change) and exits — handy for docs and CI.
 
 ## Markup
 
@@ -163,17 +161,19 @@ L.define("badge", {
 })
 ```
 
-See `plugins/badge.lua` for a complete example.
+See `examples/plugins/badge.lua` for a complete example, used by
+`examples/badges.lui`.
 
 ## How it works
 
 - `src/luic.c` compiles `.lui` into a Lua chunk that builds the element tree
-  and registers the handlers. The output is minified.
-- `src/lui.lua` runs in Lua 5.3 and walks the element tree every frame,
-  calling ImGui through the `ig` table.
+  and registers the handlers. `bin/luic` is the same compiler on its own.
+- `src/lui.lua` is the runtime. It walks the element tree every frame and
+  calls ImGui through the `ig` table. It is built into the `lui` binary
+  (`src/runtime.S`); `LUI_RUNTIME=src/lui.lua` loads it from disk instead.
 - `src/lui_imgui.cpp` binds the `ig` table to Dear ImGui and sets the theme.
-- `src/lui_host.c` owns the raylib window, the frame loop, and background HTTP
-  (curl on worker threads).
+- `src/main.c` is the `lui` command: the raylib window, the frame loop,
+  background HTTP (curl on worker threads), and `run`/`watch`/`build`/`new`.
 
 ## Examples
 
@@ -193,17 +193,16 @@ it is valid Lua, and checks that the files in `tests/errors/` are rejected with
 a line number. After an intended change to the compiler's output, regenerate
 the expected files with the command in `tests/run.sh`.
 
-CI (`.github/workflows/ci.yml`) also builds raylib, runs the tests, and
-renders every example under a virtual display; the screenshots are uploaded
-as a build artifact.
+CI (`.github/workflows/ci.yml`) also builds raylib, runs the tests, renders
+every example under a virtual display (the screenshots are uploaded as a build
+artifact), and checks `install.sh`.
 
-`tools/test_click.py` opens `examples/counter.lui.lua` in a real window,
-clicks the button through XTest, and checks the handler ran twice. It needs
+`tools/test_click.py` opens `examples/counter.lui` in a real window, clicks
+the button through XTest, and checks the handler ran twice. It needs
 `xwininfo`, `libX11` and `libXtst`.
 
 ```bash
-./bin/luic examples/counter.lui
-python3 tools/test_click.py examples/counter.lui.lua
+python3 tools/test_click.py examples/counter.lui
 ```
 
 ## License

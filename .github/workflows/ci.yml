@@ -45,14 +45,17 @@ jobs:
           mkdir -p shots
           for f in examples/*.lui; do
             name=$(basename "$f" .lui)
-            bin/luic "$f" > /dev/null
             # raylib saves screenshots in the working directory, so run from shots/
             (cd shots && LUI_SHOT="$name.png" LUI_SHOT_FRAMES=30 \
-              xvfb-run -a -s "-screen 0 1280x1024x24" \
-              ../bin/lui_host "../$f.lua" ../src/lui.lua ../plugins/badge.lua 2> "$name.log")
+              xvfb-run -a -s "-screen 0 1280x1024x24" ../bin/lui run "../$f" 2> "$name.log")
             test -f "shots/$name.png" || { echo "$name: no screenshot"; cat "shots/$name.log"; exit 1; }
             if grep -q '^lui:' "shots/$name.log"; then cat "shots/$name.log"; exit 1; fi
           done
+
+      - name: Install
+        run: |
+          ./install.sh --no-deps --prefix "$RUNNER_TEMP/lui"
+          "$RUNNER_TEMP/lui/bin/lui" version
 
       - uses: actions/upload-artifact@v4
         if: always()
